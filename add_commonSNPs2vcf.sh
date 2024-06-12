@@ -68,9 +68,15 @@ fi
 
 echo "Found dbsnp directory"
 
-# Load the modules
+# Check for bcftools
 
-module load bcftools/1.9 tabix/1.9
+if which bcftools &> /dev/null; then
+	echo "Found bcftools"
+    bcftools --version
+else 
+    echo "bcftools is not available."
+    exit 1
+fi
 
 # Generate the output file name
 

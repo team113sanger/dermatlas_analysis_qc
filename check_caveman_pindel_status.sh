@@ -41,6 +41,15 @@ else
 	manifest=${manifest[0]}
 fi
 
+# Get the columns for Tumour ID and Submit to Canpipe columns
+
+sample_col=`awk -v RS='\t' '/Tumour Sample$/{print NR; exit}' $manifest`
+submit_col=`awk -v RS='\t' '/Submit to/{print NR; exit}' $manifest`
+
+echo -e "\nBiosample manifest columns used:"
+echo "Tumour Sample column: $sample_col"
+echo -e "Submit to CanPipe column: $submit_col\n"
+
 # Check for nst_links directory
 
 if [[ ! -d /nfs/cancer_ref01/nst_links/live/$projID ]]; then
@@ -57,9 +66,9 @@ totsamples=0
 echo "##############################"
 echo -e "Checking manifest $PROJECTDIR/metadata/$manifest for submitted samples\n"
 
-for sample in `awk 'BEGIN{FS="\t"}{if($8=="Y"){print $4}}' $manifest`; do
+for sample in `awk -v submit_col=$submit_col -v sample_col=$sample_col 'BEGIN{OFS=FS="\t"}{if($submit_col=="Y"){print $sample_col}}' $manifest`; do
 	let "totsamples=totsamples+1"
-	pindelfile=/nfs/cancer_ref01/nst_links/live/$projID/$sample/$sample.pindel.flagged.vcf.gz
+	pindelfile=/nfs/cancer_ref01/nst_links/live/$projID/$sample/$sample.pindel.vep.vcf.gz
 	if [[ ! -e $pindelfile ]]; then
 		echo "$sample Pindel not complete"
 	else
@@ -74,7 +83,7 @@ for sample in `awk 'BEGIN{FS="\t"}{if($8=="Y"){print $4}}' $manifest`; do
 done
 
 echo "Found $caveman of $totsamples *smartphase.vep.vcf.gz files in /nfs/cancer_ref01/nst_links/live/$projID/"
-echo -e "Found $pindel of $totsamples *pindel.flagged.vcf.gz files in /nfs/cancer_ref01/nst_links/live/$projID/\n"
+echo -e "Found $pindel of $totsamples *pindel.vep.vcf.gz files in /nfs/cancer_ref01/nst_links/live/$projID/\n"
 
 # Copy files
 
@@ -103,7 +112,7 @@ if [[ ! -z "$getfiles" ]]; then
 		mkdir $pindel_dir
 	fi
 
-	for sample in `awk 'BEGIN{FS="\t"}{if($8=="Y"){print $4}}' $manifest`; do
+	for sample in `awk -v submit_col=$submit_col -v sample_col=$sample_col 'BEGIN{OFS=FS="\t"}{if($submit_col=="Y"){print $sample_col}}' $manifest`; do
 		let "totsamples=totsamples+1"
 		if [[ -e $pindelfile ]]; then
 			rsync -avL /nfs/cancer_ref01/nst_links/live/$projID/$sample/*pindel*vcf* $pindel_dir/$sample/
@@ -119,6 +128,4 @@ if [[ ! -z "$getfiles" ]]; then
 	echo -e "rsync'ed Pindel output files for $pindel of $totsamples sample in /nfs/cancer_ref01/nst_links/live/$projID/\n"
 fi
 			
-
-
 

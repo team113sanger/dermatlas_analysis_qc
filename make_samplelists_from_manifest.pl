@@ -2,15 +2,38 @@
 
 use strict;
 use warnings;
+use Getopt::Long;
+
+my $infile;
+my $prefix;
+my $rejected;
+
+my $check = GetOptions ("infile=s" => \$infile,
+            "prefix=s" => \$prefix,
+            "reject=s" => \$rejected);
+
+my $help = <<END;
+	
+	Usage: $0 --infile biosample_manifest.tsv --prefix \${STUDY}_\${PROJ} --reject rejected_samples.list
+
+	where 
+	--infile is a completed biosample manifest with samples selected [Required]
+	--prefix is a prefix for the output files [Suggested: Sequencescape studyID and CanApps ID] [Required]
+	--reject is a list of samples to exclude/ignore [Optional]
+
+END
+
+if (!$check) {
+	print STDERR $help;
+	exit;
+}
 
 # Read in a completed biosample manifest and print out t/n pairs,
-# one per patient
 
-my $help = "Input a completed biosample manifest, output prefix and optional file with a list of samples to exclude\n";
-
-my $infile = shift @ARGV or die $help;
-my $prefix = shift @ARGV or die $help;
-my $rejected = shift @ARGV;
+if (!$infile || !$prefix) {
+	print STDERR $help;
+	exit;
+}
 
 my %sample;
 my %reject;
@@ -32,6 +55,33 @@ open ALL_UNMATCHED, ">$prefix-analysed_unmatched.tsv" or die "Cannot write to fi
 open ALL_MATCHED, ">$prefix-analysed_matched.tsv" or die "Cannot write to file $prefix-analysed_samples_matched.tsv\n";
 open F, "<$infile" or die "Can't open $infile\n";
 
+# Get the column numbers for specific columns
+
+my $tum_col=`awk -v RS='\t' '/Tumour Sample\$/{print NR; exit}' $infile`;
+my $norm_col=`awk -v RS='\t' '/Normal Sample\$/{print NR; exit}' $infile`;
+my $submit_col=`awk -v RS='\t' '/Submit to/{print NR; exit}' $infile`;
+my $analyse_col=`awk -v RS='\t' '/Use for analysis/{print NR; exit}' $infile`;
+
+chomp($tum_col, $norm_col, $submit_col, $analyse_col);
+
+# Column number to array index
+
+$tum_col--;
+$norm_col--;
+$submit_col--;
+$analyse_col--;
+
+foreach my $header ($tum_col, $norm_col, $submit_col, $analyse_col) {
+	if (!$header || ($header && $header < 0)) {
+		print STDERR "\nOne or more columns not present: Tumour sample, Normal sample, Submit to Canpipe, Use for analysis.\n\n";
+		exit;
+	}
+}
+
+print STDERR "Tumour column: $tum_col, Normal column: $norm_col, Submit column: $submit_col, Analyse column: $analyse_col\n";
+
+# Iterate through the biosample manifest
+
 while (<F>) {
 	if (/Biosample/) {
 		next;
@@ -39,8 +89,10 @@ while (<F>) {
 	chomp;
 	my $line = $_;
 	my @col = split(/\t/, $line);
-	my $norm = $col[4];
-	my $tum = $col[3];
+	my $norm = $col[$norm_col];
+	my $tum = $col[$tum_col];
+
+	print STDERR "TUM NORM: $tum $norm\n";
 
 	# Check list of rejected samples
 	if ($reject{$tum} && $reject{$tum} == 1) {
@@ -51,15 +103,15 @@ while (<F>) {
 	}
 
 	# Check 'use for analysis' column
-	if ($col[8] =~ /Y|y/) {
+	if ($col[$analyse_col] =~ /Y|y/) {
 		my $patient = $1 if $tum =~ /(\S+)\S$/;
 		$sample{$patient}{$tum}{line} = $line;
 		$sample{$patient}{$tum}{norm} = $norm;
 	}
 	# Check 'Submit for analysis' column; all samples, including duplicates
-	if ($col[7] =~ /Y|y/) {
+	if ($col[$submit_col] =~ /Y|y/) {
 		my $fh;
-		if ($col[4] eq 'PDv38is_wes_v2') {
+		if ($norm eq 'PDv38is_wes_v2') {
 			#print ALL_UNMATCHED "$tum\t$norm\n";
 			$fh = *ALL_UNMATCHED;
 		} else {
@@ -128,13 +180,13 @@ close INDEP_MATCHED;
 
 # Create files with just the tumours
 
-
 foreach my $file ('one_tumour_per_patient', 'independent_tumours', 'analysed') {
 	foreach my $type ('matched', 'unmatched', 'all') {
 		`cut -f 1 $prefix-${file}_${type}.tsv | sort > $prefix-${file}_${type}_tum.txt`;
 	}
 }
 
+# Create a readme file explaining the files
 
 open READ, ">readme_sample_lists.txt" or die "Cannot write to readme_sample_lists.txt\n";
 
