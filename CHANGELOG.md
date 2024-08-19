@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.1 2024-08-19
+### Changed
+- Add option for the user to provide a gene/transcript list when running `reformat_vcf2maf.pl`
+
 ## [0.4.0] Publishable Unit 3
 ### Added
 - Add `mutations_per_MB.sh` and `source.me`
