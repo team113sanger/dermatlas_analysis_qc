@@ -9,14 +9,16 @@ usage () {
 	-b   Genome build for the Build column in the MAF file, e.g. GRCh38
 	-a   Name of the column with SNP allele frequencies, e.g. gnomAD_AF
 	-f   Filter to use (filter1 or filter2)
-	-p   Skip MAF creation and run plotting only, if MAFs already exist [optional]
+	-p   Boolean. Skip MAF creation and run plotting only, if MAFs already exist [optional]
+	-t   TSV file [Gene\\\tENST_ID] with transcript(s) to use for consequence annotation [optional]
+	     Default is the use the Ensembl canonical transcript
 
 	NOTE: Use 'filter1' to indicate filtering by VAF >= 0.1 or 'filter2' to filter by 'ONP', VAF and REF and ALT lengths (indels)\n"
 	exit 1;
 }
 
 
-while getopts "l:m:s:b:a:f:ph" flag; do
+while getopts "l:m:s:b:a:f:t:ph" flag; do
 	case "${flag}" in
 		l) vcflist=$OPTARG
 		   ;;
@@ -32,6 +34,8 @@ while getopts "l:m:s:b:a:f:ph" flag; do
 		   ;;
 		p) skip_maf=1
 		   ;;
+		t) transcripts=$OPTARG
+		   ;;
 		h | *) 
 		   usage
 		   exit 0
@@ -46,17 +50,18 @@ shift $((OPTIND -1))
 
 # Check input parameters
 
-if [[ -z "$SCRIPTDIR" || -z "$vcflist" ]]; then
+if [[ -z $SCRIPTDIR || -z $vcflist ]]; then
 	usage
 	exit 1
 fi
 
-if [[ ! -z "$which" && ! ($which == "filter1" || $which == "filter2") ]]; then
+if [[ ! -z $which && ! ($which == "filter1" || $which == "filter2") ]]; then
 	echo "The filter option -f should be 'filter1' to indicate filtering by VAF >= 0.1 or 'filter2' to filter by 'ONP', VAF and REF and ALT lengths (indels)"
 	usage
 	exit 1
 fi
 
+	
 # Check that directories and files exist
 
 echo "Checking script directory and input files"
@@ -78,10 +83,13 @@ elif [[ ! -e $SCRIPTDIR/maketileplot_from_maf.R ]]; then
 elif [[ ! -e $vcflist ]]; then 
 	echo "File $vcflist does not exist"
 	exit 1
+elif [[ ! -z $transcripts && ! -e $transcripts ]]; then
+	echo "Transcript file $transcripts does not exist"
+	exit 1
 fi
 
 echo "Output directory is current directory: $PWD"
-if [[ ! -z "$skip_maf" ]]; then
+if [[ ! -z $skip_maf ]]; then
 	echo "Skipping vcf2maf; making plots only"
 fi
 
@@ -141,9 +149,14 @@ done
 # 
 #
 
-if [[ -z "$skip_maf" ]]; then
-	$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --pass --sample_list sample_list.tsv --dbsnp_filter > pass_${maf_file}
-	$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --voi_only --dbsnp_filter > voi_${maf_file}
+if [[ -z $skip_maf ]]; then
+	if [[ -z $transcripts ]]; then
+		$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --pass --sample_list sample_list.tsv --dbsnp_filter > pass_${maf_file}
+		$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --voi_only --dbsnp_filter > voi_${maf_file}
+	else
+		$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --pass --sample_list sample_list.tsv --dbsnp_filter --transcripts $transcripts > pass_${maf_file}
+		$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --voi_only --dbsnp_filter --transcripts $transcripts > voi_${maf_file}
+	fi
 
 	head -n1 pass_${maf_file} > keep_${maf_file}
 	awk 'BEGIN{FS="\t"}{if($28~/keep/){print}}' pass_${maf_file} >> keep_${maf_file}
@@ -167,8 +180,13 @@ if [[ -z "$skip_maf" ]]; then
 	##--vcflist test.list  --build $BUILD  --keepPA --tum_vaf 0.1 --vaf_filter_type indel --indel_filter
 
 	if [[ $which == "filter1" || $which == "filter2" ]]; then
-		$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --pass --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --dbsnp_filter > pass_vaf_filt_${maf_file}
-		$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --voi_only --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --dbsnp_filter > voi_vaf_filt_${maf_file}
+		if [[ -z $transcripts ]]; then
+			$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --pass --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --dbsnp_filter > pass_vaf_filt_${maf_file}
+			$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --voi_only --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --dbsnp_filter > voi_vaf_filt_${maf_file}
+		else
+			$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --pass --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --dbsnp_filter --transcripts $transcripts > pass_vaf_filt_${maf_file}
+			$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --voi_only --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --dbsnp_filter --transcripts $transcripts > voi_vaf_filt_${maf_file}
+		fi
 		head -n1 pass_vaf_filt_${maf_file} > keep_vaf_filt_${maf_file}
 		awk 'BEGIN{FS="\t"}{if($28~/keep/){print}}' pass_vaf_filt_${maf_file} >> keep_vaf_filt_${maf_file}
 
@@ -183,8 +201,13 @@ if [[ -z "$skip_maf" ]]; then
 	fi
 
 	if [[ $which == "filter2" ]]; then
-		$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --pass --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --indel_filter --dbsnp_filter > pass_vaf_size_filt_${maf_file}
-		$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --voi_only --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --indel_filter --dbsnp_filter > voi_vaf_size_filt_${maf_file}
+		if [[ -z $transcripts ]]; then
+			$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --pass --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --indel_filter --dbsnp_filter > pass_vaf_size_filt_${maf_file}
+			$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --voi_only --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --indel_filter --dbsnp_filter > voi_vaf_size_filt_${maf_file}
+		else
+			$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --pass --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --indel_filter --dbsnp_filter --transcripts $transcripts > pass_vaf_size_filt_${maf_file}
+			$SCRIPTDIR/reformat_vcf2maf.pl --vcflist $vcflist --build $BUILD --voi_only --tum_vaf 0.1 --vaf_filter_type indel --af_col $AF_COL --indel_filter --dbsnp_filter --transcripts $transcripts > voi_vaf_size_filt_${maf_file}
+		fi
 
 		head -n1 pass_vaf_size_filt_${maf_file} > keep_vaf_size_filt_${maf_file}
 		awk 'BEGIN{FS="\t"}{if($28~/keep/){print}}' pass_vaf_size_filt_${maf_file} >> keep_vaf_size_filt_${maf_file}
