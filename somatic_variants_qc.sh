@@ -241,9 +241,9 @@ for type in keep keepPA voi; do
 	if [[ "$plot_height" -le 5 ]]; then
 		plot_height=1
 	elif [[ "$check" -gt 0 ]]; then
-		let "plot_height=1+$(echo $plot_height / 5 | bc)"
+		let plot_height=1+$(echo $plot_height / 5 | bc)
 	else
-		plot_height=$plot_height
+		let plot_height=$plot_height/5
 	fi
 	plot_height=$(echo $plot_height*1.5 | bc -l)
 	Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list.tsv --width 10 --height $plot_height -ncol 5
@@ -265,7 +265,7 @@ for type in keep_matched keepPA_matched voi_matched; do
 	elif [[ "$check" -gt 0 ]]; then
 		let plot_height=1+$(echo $plot_height / 5 | bc)
 	else
-		plot_height=$plot_height
+		let plot_height=$plot_height/5
 	fi
 	plot_height=$(echo $plot_height*1.5 | bc -l)
 	Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list_matched.tsv --width 10 --height $plot_height -ncol 5
@@ -292,7 +292,7 @@ if [[ $which == "filter1" || $which == "filter2" ]]; then
 		elif [[ "$check" -gt 0 ]]; then
 			let plot_height=1+$(echo $plot_height / 5 | bc)
 		else
-			plot_height=$plot_height
+			let plot_height=$plot_height/5
 		fi
 		plot_height=$(echo $plot_height*1.5 | bc -l)
 		Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list.tsv --width 10 --height $plot_height -ncol 5
@@ -318,7 +318,7 @@ if [[ $which == "filter1" || $which == "filter2" ]]; then
 		elif [[ "$check" -gt 0 ]]; then
 			let plot_height=1+$(echo $plot_height / 5 | bc)
 		else
-			plot_height=$plot_height
+			let plot_height=$plot_height/5
 		fi
 		plot_height=$(echo $plot_height*1.5 | bc -l)
 		Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list_matched.tsv --width 10 --height $plot_height -ncol 5
