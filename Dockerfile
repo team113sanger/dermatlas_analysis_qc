@@ -1,4 +1,4 @@
-FROM gitlab-registry.internal.sanger.ac.uk/dermatlas/analysis-methods/maf:0.5.2 as base
+FROM gitlab-registry.internal.sanger.ac.uk/dermatlas/analysis-methods/maf:latest as base
 RUN mv /opt/repo /opt/maf
 
 USER root
