@@ -27,8 +27,6 @@ ENV \
     RENV_PATHS_LIBRARY="${RENV_DIRECTORY:?}/library"
 
 
-COPY --chown="${USER_NAME}:${USER_NAME}" [".gitignore", "./"]
-
 # Copy the rest of the files into the image (except the .Dockerignore files)
 COPY --chown="${USER_NAME}:${USER_NAME}" . .
 
