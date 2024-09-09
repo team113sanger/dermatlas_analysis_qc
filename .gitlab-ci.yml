@@ -26,6 +26,9 @@ include:
     # We need to set this to 1 to enable BuildKit as the Dockerfile uses BuildKit features to speed up the build
     DOCKER_BUILDKIT: 1
     PRE_FETCH_BASE_IMAGE: gitlab-registry.internal.sanger.ac.uk/dermatlas/analysis-methods/maf:latest
+    DOCKER_BUILD_CONTEXT: .
+    DOCKERFILE_PATH: docker/Dockerfile
+
 
 ############
 #   JOBS   #
