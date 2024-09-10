@@ -30,6 +30,7 @@ ENV \
 # Copy the rest of the files into the image (except the .Dockerignore files)
 COPY --chown="${USER_NAME}:${USER_NAME}" . .
 
+RUN chown -R "${USER_NAME:?}:${USER_NAME:?}" "${PROJECT_DIRECTORY:?}" "${DATA_DIRECTORY:?}" "${USER_DIRECTORY:?}" "${OPT_DIRECTORY:?}" "/opt/maf"
 # # Switch to the non-root user
 USER "${USER_NAME:?}"
 
