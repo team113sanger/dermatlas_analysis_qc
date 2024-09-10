@@ -1,5 +1,5 @@
 FROM gitlab-registry.internal.sanger.ac.uk/dermatlas/analysis-methods/maf:latest as base
-RUN mv /opt/repo /opt/maf
+RUN mv /opt/repo /opt/MAF
 
 USER root
 
@@ -30,8 +30,8 @@ ENV \
 # Copy the rest of the files into the image (except the .Dockerignore files)
 COPY --chown="${USER_NAME}:${USER_NAME}" . .
 
-RUN chown -R "${USER_NAME:?}:${USER_NAME:?}" "${PROJECT_DIRECTORY:?}" "${DATA_DIRECTORY:?}" "${USER_DIRECTORY:?}" "${OPT_DIRECTORY:?}" "/opt/maf" \
-    && chmod -R 755 "${PROJECT_DIRECTORY:?}" "${DATA_DIRECTORY:?}" "${USER_DIRECTORY:?}" "${OPT_DIRECTORY:?}" "/opt/maf"
+RUN chown -R "${USER_NAME:?}:${USER_NAME:?}" "${PROJECT_DIRECTORY:?}" "${DATA_DIRECTORY:?}" "${USER_DIRECTORY:?}" "${OPT_DIRECTORY:?}" "/opt/MAF" \
+    && chmod -R 755 "${PROJECT_DIRECTORY:?}" "${DATA_DIRECTORY:?}" "${USER_DIRECTORY:?}" "${OPT_DIRECTORY:?}" "/opt/MAF"
 
 
 # # Switch to the non-root user
