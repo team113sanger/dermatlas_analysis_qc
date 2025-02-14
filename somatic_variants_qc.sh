@@ -4,12 +4,15 @@
 usage () {
 	echo -e "\nUsage $0: [options]
 	-l   File with a list of VCFs
-	-m   Output MAF file suffix
+	-m   Output MAF file suffix, e.g. xxxx.maf
 	-s   Path to script directory
 	-b   Genome build for the Build column in the MAF file, e.g. GRCh38
 	-a   Name of the column with SNP allele frequencies, e.g. gnomAD_AF
 	-f   Filter to use (filter1 or filter2)
 	-p   Boolean. Skip MAF creation and run plotting only, if MAFs already exist [optional]
+	-r   Boolean. Run reformatting VCF to MAF only; skip plotting [optional]
+	-g   Boolean. Use 'Hugo_Symbol/Gene' MAF columns for gene tile plot. Use when some Hugo symbols are missing [optional] 
+	-n   Boolean. VCFs are normal (germline) VCFs; plot AF vs D using VAF_norm, n_depth
 	-t   TSV file [Gene\\\tENST_ID] with transcript(s) to use for consequence annotation [optional]
 	     Default is the use the Ensembl canonical transcript
 
@@ -18,7 +21,7 @@ usage () {
 }
 
 
-while getopts "l:m:s:b:a:f:t:ph" flag; do
+while getopts "l:m:s:b:a:f:t:prgnh" flag; do
 	case "${flag}" in
 		l) vcflist=$OPTARG
 		   ;;
@@ -34,7 +37,13 @@ while getopts "l:m:s:b:a:f:t:ph" flag; do
 		   ;;
 		p) skip_maf=1
 		   ;;
+		r) skip_plotting=1
+		   ;;
 		t) transcripts=$OPTARG
+		   ;;
+		g) geneid=1
+		   ;;
+		n) normal=1
 		   ;;
 		h | *) 
 		   usage
@@ -89,8 +98,22 @@ elif [[ ! -z $transcripts && ! -e $transcripts ]]; then
 fi
 
 echo "Output directory is current directory: $PWD"
-if [[ ! -z $skip_maf ]]; then
+
+if [[ ! -z $skip_maf && ! -z $skip_plotting ]]; then
+	echo "Skipping plotting (-r) and skipping MAF generation (-p). Nothing to do!"
+	exit 1;
+elif [[ ! -z $skip_maf ]]; then
 	echo "Skipping vcf2maf; making plots only"
+elif [[ ! -z $skip_plotting ]]; then
+	echo "Generating MAFs only; skipping plotting"
+fi
+
+if [[ ! -z $geneid ]]; then
+	echo "Using 'Hugo_Symbol/Gene' format for gene tile plot"
+fi
+
+if [[ ! -z $normal ]]; then
+	echo "VCFs have germline variants. Using VAF_norm and n_depth for plotting"
 fi
 
 # Check that each VCF exists
@@ -166,15 +189,17 @@ if [[ -z $skip_maf ]]; then
 
 	# Remove tumours run with in silico normal
 
-	grep -v PDv38is_wes_v2 pass_${maf_file} > pass_matched_${maf_file}
-	grep -v PDv38is_wes_v2 keep_${maf_file} > keep_matched_${maf_file}
-	grep -v PDv38is_wes_v2 keepPA_${maf_file} > keepPA_matched_${maf_file}
-	grep -v PDv38is_wes_v2 voi_${maf_file} > voi_matched_${maf_file}
+	if [[ -z $normal ]]; then
+		grep -v PDv38is_wes_v2 pass_${maf_file} > pass_matched_${maf_file}
+		grep -v PDv38is_wes_v2 keep_${maf_file} > keep_matched_${maf_file}
+		grep -v PDv38is_wes_v2 keepPA_${maf_file} > keepPA_matched_${maf_file}
+		grep -v PDv38is_wes_v2 voi_${maf_file} > voi_matched_${maf_file}
+		grep -v PDv38is_wes_v2 sample_list.tsv > sample_list_matched.tsv
+		cut -f 1 sample_list_matched.tsv > sample_list_matched_tum.tsv
+	fi
 
-	grep -v wes_v2 sample_list.tsv > sample_list_matched.tsv
 
 	cut -f 1 sample_list.tsv > sample_list_tum.tsv
-	cut -f 1 sample_list_matched.tsv > sample_list_matched_tum.tsv
 
 	# Filter VCFs
 	##--vcflist test.list  --build $BUILD  --keepPA --tum_vaf 0.1 --vaf_filter_type indel --indel_filter
@@ -193,11 +218,12 @@ if [[ -z $skip_maf ]]; then
 		head -n1 keep_vaf_filt_${maf_file} > keepPA_vaf_filt_${maf_file}
 		awk 'BEGIN{FS="\t"}{if($28~/keep-PA/){print}}' keep_vaf_filt_${maf_file} >> keepPA_vaf_filt_${maf_file}
 
-		grep -v PDv38is_wes_v2 pass_vaf_filt_${maf_file} > pass_vaf_filt_matched_${maf_file}
-		grep -v PDv38is_wes_v2 keep_vaf_filt_${maf_file} > keep_vaf_filt_matched_${maf_file}
-		grep -v PDv38is_wes_v2 keepPA_vaf_filt_${maf_file} > keepPA_vaf_filt_matched_${maf_file}
-		grep -v PDv38is_wes_v2 voi_vaf_filt_${maf_file} > voi_vaf_filt_matched_${maf_file}
-
+		if [[ -z $normal ]]; then
+			grep -v PDv38is_wes_v2 pass_vaf_filt_${maf_file} > pass_vaf_filt_matched_${maf_file}
+			grep -v PDv38is_wes_v2 keep_vaf_filt_${maf_file} > keep_vaf_filt_matched_${maf_file}
+			grep -v PDv38is_wes_v2 keepPA_vaf_filt_${maf_file} > keepPA_vaf_filt_matched_${maf_file}
+			grep -v PDv38is_wes_v2 voi_vaf_filt_${maf_file} > voi_vaf_filt_matched_${maf_file}
+		fi
 	fi
 
 	if [[ $which == "filter2" ]]; then
@@ -215,11 +241,12 @@ if [[ -z $skip_maf ]]; then
 		head -n1 keep_vaf_size_filt_${maf_file} > keepPA_vaf_size_filt_${maf_file}
 		awk 'BEGIN{FS="\t"}{if($28~/keep-PA/){print}}' keep_vaf_size_filt_${maf_file} >> keepPA_vaf_size_filt_${maf_file}
 
-		grep -v PDv38is_wes_v2 pass_vaf_size_filt_${maf_file} > pass_vaf_size_filt_matched_${maf_file}
-		grep -v PDv38is_wes_v2 keep_vaf_size_filt_${maf_file} > keep_vaf_size_filt_matched_${maf_file}
-		grep -v PDv38is_wes_v2 keepPA_vaf_size_filt_${maf_file} > keepPA_vaf_size_filt_matched_${maf_file}
-		grep -v PDv38is_wes_v2 voi_vaf_size_filt_${maf_file} > voi_vaf_size_filt_matched_${maf_file}
-
+		if [[ -z $normal ]]; then
+			grep -v PDv38is_wes_v2 pass_vaf_size_filt_${maf_file} > pass_vaf_size_filt_matched_${maf_file}
+			grep -v PDv38is_wes_v2 keep_vaf_size_filt_${maf_file} > keep_vaf_size_filt_matched_${maf_file}
+			grep -v PDv38is_wes_v2 keepPA_vaf_size_filt_${maf_file} > keepPA_vaf_size_filt_matched_${maf_file}
+			grep -v PDv38is_wes_v2 voi_vaf_size_filt_${maf_file} > voi_vaf_size_filt_matched_${maf_file}
+		fi
 	fi
 fi
 
@@ -231,57 +258,8 @@ fi
 #
 #export PERL5LIB=/software/team113/dermatlas/perl5/5.38.0/perl5/
 
-
-for type in keep keepPA voi; do
-	mkdir -p plots_${type}
-	cd plots_${type}
-	sample_col=`head -n1 ../${type}_${maf_file} | sed 's/\t/\n/g' | grep -n Barcode | cut -f 1 -d ":"`
-	plot_height=`cut -f $sample_col ../${type}_${maf_file} | grep -v Barcode | sort -u |wc -l`
-	check=$(echo $plot_height / 5 | bc -l | perl -ne 's/\S+\.(\S+)/$1/;print')
-	if [[ "$plot_height" -le 5 ]]; then
-		plot_height=1
-	elif [[ "$check" -gt 0 ]]; then
-		let plot_height=1+$(echo $plot_height / 5 | bc)
-	else
-		let plot_height=$plot_height/5
-	fi
-	plot_height=$(echo $plot_height*1.5 | bc -l)
-	Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list.tsv --width 10 --height $plot_height -ncol 5
-	cut -f 3 top_recurrently_mutated_genes.tsv |sort -u | grep -v Hugo_ > top_genes.list
-	echo "Plotting tile plot $type"
-	Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 8 -t 5 
-	echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 8 -t 5"
-	cd ..
-done
-
-for type in keep_matched keepPA_matched voi_matched; do
-	mkdir -p plots_${type}
-	cd plots_${type}
-	sample_col=`head -n1 ../${type}_${maf_file} | sed 's/\t/\n/g' | grep -n Barcode | cut -f 1 -d ":"`
-	plot_height=`cut -f $sample_col ../${type}_${maf_file} | grep -v Barcode | sort -u |wc -l`
-	check=$(echo $plot_height / 5 | bc -l | perl -ne 's/\S+\.(\S+)/$1/;print')
-	if [[ "$plot_height" -le 5 ]]; then
-		plot_height=1
-	elif [[ "$check" -gt 0 ]]; then
-		let plot_height=1+$(echo $plot_height / 5 | bc)
-	else
-		let plot_height=$plot_height/5
-	fi
-	plot_height=$(echo $plot_height*1.5 | bc -l)
-	Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list_matched.tsv --width 10 --height $plot_height -ncol 5
-	cut -f 3 top_recurrently_mutated_genes.tsv | sort -u | grep -v Hugo_ > top_genes.list
-	echo "Plotting tile plot $type"
-	Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv -g top_genes.list --sortbyfrequency -w 8 -t 5
-	echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv -g top_genes.list --sortbyfrequency -w 8 -t 5"
-	cd ..
-done
-
-if [[ $which == "filter1" || $which == "filter2" ]]; then
-	type_array=("keep_vaf_filt" "keepPA_vaf_filt" "voi_vaf_filt")
-	if [[ $which == "filter2" ]]; then
-		type_array+=("keep_vaf_size_filt" "keepPA_vaf_size_filt" "voi_vaf_size_filt")
-	fi
-	for type in ${type_array[*]}; do
+if [[ -z $skip_plotting ]]; then
+	for type in keep keepPA voi; do
 		mkdir -p plots_${type}
 		cd plots_${type}
 		sample_col=`head -n1 ../${type}_${maf_file} | sed 's/\t/\n/g' | grep -n Barcode | cut -f 1 -d ":"`
@@ -295,38 +273,131 @@ if [[ $which == "filter1" || $which == "filter2" ]]; then
 			let plot_height=$plot_height/5
 		fi
 		plot_height=$(echo $plot_height*1.5 | bc -l)
-		Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list.tsv --width 10 --height $plot_height -ncol 5
-		cut -f 3 top_recurrently_mutated_genes.tsv |sort -u | grep -v Hugo_ > top_genes.list
-		echo "Plotting tile plot $type"
-		Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 8 -t 5 
-		echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 8 -t 5"
+		if [[ -z ${normal} ]]; then
+			Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list.tsv --width 10 --height $plot_height --ncol 5
+		else
+			Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list.tsv --width 10 --height $plot_height --ncol 5 --germline
+		fi
+		if [[ -z ${geneid} ]]; then
+			cut -f 3 top_recurrently_mutated_genes.tsv |sort -u | grep -v Hugo_ > top_genes.list
+			echo "Plotting tile plot $type"
+			Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 8 -t 5 
+			echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 8 -t 5"
+		else
+			cut -f 1 top_recurrently_mutated_genes.tsv |sort -u | grep -v Gene_ > top_genes.list
+			echo "Plotting tile plot $type"
+			Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 10 -t 5 --geneid_list
+			echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 10 -t 5 --geneid_list"
+		fi
 		cd ..
 	done
 
-	type_matched_array=("keep_vaf_filt_matched" "keepPA_vaf_filt_matched" "voi_vaf_filt_matched")
-	if [[ $which == "filter2" ]]; then
-		type_matched_array+=("keep_vaf_size_filt_matched" "keepPA_vaf_size_filt_matched" "voi_vaf_size_filt_matched")
+	if [[ -z $normal ]]; then
+		for type in keep_matched keepPA_matched voi_matched; do
+			mkdir -p plots_${type}
+			cd plots_${type}
+			sample_col=`head -n1 ../${type}_${maf_file} | sed 's/\t/\n/g' | grep -n Barcode | cut -f 1 -d ":"`
+			plot_height=`cut -f $sample_col ../${type}_${maf_file} | grep -v Barcode | sort -u |wc -l`
+			check=$(echo $plot_height / 5 | bc -l | perl -ne 's/\S+\.(\S+)/$1/;print')
+			if [[ "$plot_height" -le 5 ]]; then
+				plot_height=1
+			elif [[ "$check" -gt 0 ]]; then
+				let plot_height=1+$(echo $plot_height / 5 | bc)
+			else
+				let plot_height=$plot_height/5
+			fi
+			plot_height=$(echo $plot_height*1.5 | bc -l)
+			Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list_matched.tsv --width 10 --height $plot_height --ncol 5
+			if [[ -z ${geneid} ]]; then
+				cut -f 3 top_recurrently_mutated_genes.tsv | sort -u | grep -v Hugo_ > top_genes.list
+				echo "Plotting tile plot $type"
+				Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv -g top_genes.list --sortbyfrequency -w 8 -t 5
+				echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv -g top_genes.list --sortbyfrequency -w 8 -t 5"
+			else
+				cut -f 1 top_recurrently_mutated_genes.tsv |sort -u | grep -v Gene_ > top_genes.list
+				echo "Plotting tile plot $type"
+				Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv  -g top_genes.list --sortbyfrequency -w 10 -t 5 --geneid_list
+				echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv  -g top_genes.list --sortbyfrequency -w 10 -t 5 --geneid_list"
+			fi
+			cd ..
+		done
 	fi
-	for type in ${type_matched_array[*]}; do
-		mkdir -p plots_${type}
-		cd plots_${type}
-		sample_col=`head -n1 ../${type}_${maf_file} | sed 's/\t/\n/g' | grep -n Barcode | cut -f 1 -d ":"`
-		plot_height=`cut -f $sample_col ../${type}_${maf_file} | grep -v Barcode | sort -u |wc -l`
-		check=$(echo $plot_height / 5 | bc -l | perl -ne 's/\S+\.(\S+)/$1/;print')
-		if [[ "$plot_height" -le 5 ]]; then
-			plot_height=1
-		elif [[ "$check" -gt 0 ]]; then
-			let plot_height=1+$(echo $plot_height / 5 | bc)
-		else
-			let plot_height=$plot_height/5
+
+	if [[ $which == "filter1" || $which == "filter2" ]]; then
+		type_array=("keep_vaf_filt" "keepPA_vaf_filt" "voi_vaf_filt")
+		if [[ $which == "filter2" ]]; then
+			type_array+=("keep_vaf_size_filt" "keepPA_vaf_size_filt" "voi_vaf_size_filt")
 		fi
-		plot_height=$(echo $plot_height*1.5 | bc -l)
-		Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list_matched.tsv --width 10 --height $plot_height -ncol 5
-		cut -f 3 top_recurrently_mutated_genes.tsv | sort -u | grep -v Hugo_ > top_genes.list
-		echo "Plotting tile plot $type"
-		Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv -g top_genes.list --sortbyfrequency -w 8 -t 5
-		echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv -g top_genes.list --sortbyfrequency -w 8 -t 5"
-		cd ..
-	done
+		for type in ${type_array[*]}; do
+			mkdir -p plots_${type}
+			cd plots_${type}
+			sample_col=`head -n1 ../${type}_${maf_file} | sed 's/\t/\n/g' | grep -n Barcode | cut -f 1 -d ":"`
+			plot_height=`cut -f $sample_col ../${type}_${maf_file} | grep -v Barcode | sort -u |wc -l`
+			check=$(echo $plot_height / 5 | bc -l | perl -ne 's/\S+\.(\S+)/$1/;print')
+			if [[ "$plot_height" -le 5 ]]; then
+				plot_height=1
+			elif [[ "$check" -gt 0 ]]; then
+				let plot_height=1+$(echo $plot_height / 5 | bc)
+			else
+				let plot_height=$plot_height/5
+			fi
+			plot_height=$(echo $plot_height*1.5 | bc -l)
+			if [[ -z ${normal} ]]; then
+				Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list.tsv --width 10 --height $plot_height --ncol 5
+			else
+				Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list.tsv --width 10 --height $plot_height --ncol 5 --germline
+			fi
+			if [[ -z ${geneid} ]]; then
+				cut -f 3 top_recurrently_mutated_genes.tsv |sort -u | grep -v Hugo_ > top_genes.list
+				echo "Plotting tile plot $type"
+				Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 8 -t 5 
+				echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 8 -t 5"
+			else
+				cut -f 1 top_recurrently_mutated_genes.tsv |sort -u | grep -v Gene_ > top_genes.list
+				echo "Plotting tile plot $type"
+				Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 10 -t 5 --geneid_list 
+				echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_tum.tsv  -g top_genes.list --sortbyfrequency -w 10 -t 5 --geneid_list"
+			fi 
+			cd ..
+		done
+
+		if [[ -z ${normal} ]]; then
+			type_matched_array=("keep_vaf_filt_matched" "keepPA_vaf_filt_matched" "voi_vaf_filt_matched")
+			if [[ $which == "filter2" ]]; then
+				type_matched_array+=("keep_vaf_size_filt_matched" "keepPA_vaf_size_filt_matched" "voi_vaf_size_filt_matched")
+			fi
+			for type in ${type_matched_array[*]}; do
+				mkdir -p plots_${type}
+				cd plots_${type}
+				sample_col=`head -n1 ../${type}_${maf_file} | sed 's/\t/\n/g' | grep -n Barcode | cut -f 1 -d ":"`
+				plot_height=`cut -f $sample_col ../${type}_${maf_file} | grep -v Barcode | sort -u |wc -l`
+				check=$(echo $plot_height / 5 | bc -l | perl -ne 's/\S+\.(\S+)/$1/;print')
+				if [[ "$plot_height" -le 5 ]]; then
+					plot_height=1
+				elif [[ "$check" -gt 0 ]]; then
+					let plot_height=1+$(echo $plot_height / 5 | bc)
+				else
+					let plot_height=$plot_height/5
+				fi
+				plot_height=$(echo $plot_height*1.5 | bc -l)
+				if [[ -z ${normal} ]]; then
+					Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list_matched.tsv --width 10 --height $plot_height -ncol 5
+				else
+					Rscript $SCRIPTDIR/plot_vaf_vs_depth_from_maf.R --file ../${type}_${maf_file} --samplefile ../sample_list_matched.tsv --width 10 --height $plot_height -ncol 5 --germline
+				fi
+				if [[ -z ${geneid} ]]; then
+					cut -f 3 top_recurrently_mutated_genes.tsv | sort -u | grep -v Hugo_ > top_genes.list
+					echo "Plotting tile plot $type"
+					Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv -g top_genes.list --sortbyfrequency -w 8 -t 5
+					echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv -g top_genes.list --sortbyfrequency -w 8 -t 5"
+				else
+					cut -f 1 top_recurrently_mutated_genes.tsv | sort -u | grep -v Gene_ > top_genes.list
+					echo "Plotting tile plot $type"
+					Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv -g top_genes.list --sortbyfrequency -w 8 -t 5 --geneid_list
+					echo "Rscript $SCRIPTDIR/maketileplot_from_maf.R -a ../${type}_${maf_file} -s ../sample_list_matched_tum.tsv -g top_genes.list --sortbyfrequency -w 8 -t 5 --geneid_list"
+				fi
+				cd ..
+			done
+		fi
+	fi
 fi
-
