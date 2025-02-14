@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] 2024-14-02
+### Added
+- Update inherited MAF and available perl/R dependencies. Current version is 0.6.2.
+
 ## [0.4.3] 2024-09-27
 ### Added
 - Added a Docker build and continuous integration to the repo. Build is on top of MAF and inherits all of it's available perl/R dependencies. Current version is 0.5.3.
