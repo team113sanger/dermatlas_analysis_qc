@@ -6,19 +6,22 @@ use Getopt::Long;
 
 my $infile;
 my $prefix;
+my $metadata_file;
 my $rejected;
 
 my $check = GetOptions ("infile=s" => \$infile,
             "prefix=s" => \$prefix,
+            "metadata=s" => \$metadata_file,
             "reject=s" => \$rejected);
 
 my $help = <<END;
 	
-	Usage: $0 --infile biosample_manifest.tsv --prefix \${STUDY}_\${PROJ} --reject rejected_samples.list
+	Usage: $0 --infile biosample_manifest.tsv --prefix \${STUDY}_\${PROJ} --reject rejected_samples.list --metadata metadata.tsv
 
 	where 
-	--infile is a completed biosample manifest with samples selected [Required]
+	--infile is a completed biosample manifest with samples selected (TSV) [Required]
 	--prefix is a prefix for the output files [Suggested: Sequencescape studyID and CanApps ID] [Required]
+	--metadata is a metadata file with a 'Tumour type' column (TSV) [optional]
 	--reject is a list of samples to exclude/ignore [Optional]
 
 END
@@ -80,6 +83,38 @@ foreach my $header ($tum_col, $norm_col, $submit_col, $analyse_col) {
 
 print STDERR "Tumour column: $tum_col, Normal column: $norm_col, Submit column: $submit_col, Analyse column: $analyse_col\n";
 
+my %valid_types = map { $_ => 1 } ("P", "R", "M", "U", "-");
+my %tum_types;
+
+# Make a lookup table for tumour type
+if (defined($metadata_file)) {
+	my $tum_type_col=`awk -v RS='\t' '/Tumour type/{print NR; exit}' $metadata_file`;
+	my $sanger_id_col=`awk -v RS='\t' '/Sanger_DNA_ID/{print NR; exit}' $metadata_file`;
+	# Column number to array index
+	$tum_type_col--;
+	$sanger_id_col--;
+
+
+	open MET, "<$metadata_file" or die "Can't open $metadata_file\n";
+	while (<MET>) {
+		if (/Sanger/) {
+			next;
+		}
+		chomp;
+		my $line = $_;
+		my @col = split(/\t/, $line);
+		my $sanger_id = $col[$sanger_id_col];
+		my $type = $col[$tum_type_col];
+
+		if (exists $valid_types{$type}) {
+			$tum_types{$sanger_id} = $type;
+		} else {
+			die("Error: found tumour type $type for sample $sanger_id; must be one of " . join(",", keys(%valid_types)) . "\n");
+		}
+	}
+	close MET;
+}
+
 # Iterate through the biosample manifest
 
 while (<F>) {
@@ -107,7 +142,16 @@ while (<F>) {
 		my $patient = $1 if $tum =~ /(\S+)\S$/;
 		$sample{$patient}{$tum}{line} = $line;
 		$sample{$patient}{$tum}{norm} = $norm;
+
+		if (defined($metadata_file)) {
+			if (exists($tum_types{$tum})) {
+				$sample{$patient}{$tum}{type} = $tum_types{$tum};
+			} else {
+				die("Error: tumour type not found for $tum\n")
+			}
+		}
 	}
+
 	# Check 'Submit for analysis' column; all samples, including duplicates
 	if ($col[$submit_col] =~ /Y|y/) {
 		my $fh;
@@ -136,6 +180,12 @@ open INDEP_UNMATCHED, ">$prefix-independent_tumours_unmatched.tsv" or die "Canno
 open ONE_MATCHED, ">$prefix-one_tumour_per_patient_matched.tsv" or die "Cannot write to file $prefix-one_tumour_per_patient_matched.tsv\n";
 open INDEP_MATCHED, ">$prefix-independent_tumours_matched.tsv" or die "Cannot write to file $prefix-independent_tumours_matched.tsv\n";
 
+if (defined($metadata_file)) {
+	open RELATED, ">$prefix-related_tumours_all.tsv" or die "Cannot write to file $prefix-related_tumours_all.tsv\n";
+	open RELATED_UNMATCHED, ">$prefix-related_tumours_unmatched.tsv" or die "Cannot write to file $prefix-related_tumours_unmatched.tsv\n";
+	open RELATED_MATCHED, ">$prefix-related_tumours_matched.tsv" or die "Cannot write to file $prefix-related_tumours_matched.tsv\n";
+}
+
 foreach my $patient (sort keys %sample) {
 	my @tums = (sort keys %{$sample{$patient}});
 	# Print one sample per patient, sort by alphabetical order
@@ -148,26 +198,55 @@ foreach my $patient (sort keys %sample) {
 		#print ONE_MATCHED "$tums[0]\t$sample{$patient}{$tums[0]}{norm}\n";
 		$fh1 = *ONE_MATCHED;
 	}
-	print $fh1 "$tums[0]\t$sample{$patient}{$tums[0]}{norm}\n";
-	print ONE "$tums[0]\t$sample{$patient}{$tums[0]}{norm}\n";
-	##print $sample{$patient}{$tums[0]}[0] . "\n";
-	foreach my $i (1..$#tums) {
-		print STDERR "Excluding lesion from same patient: $tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n$sample{$patient}{$tums[$i]}{line}\n";
+    # Optionally, check tumour types
+	# One-per-patient tumour priority: P, R, M, U, "-"
+	my $found = undef;
+	if (defined($metadata_file)) {
+		foreach my $valid_type (keys(%valid_types)) {
+			foreach my $i (0..$#tums) {
+				my $sample_tum_type = $sample{$patient}{$tums[$i]}{type};
+				if ($sample_tum_type eq $valid_type) {
+					print $fh1 "$tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n";
+					print ONE "$tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n";
+					$found = $i;
+					last;
+				}
+			}
+			last if defined($found);
+		}
+	} else {
+		print $fh1 "$tums[0]\t$sample{$patient}{$tums[0]}{norm}\n";
+		print ONE "$tums[0]\t$sample{$patient}{$tums[0]}{norm}\n";
+		$found = 0;
 	}
 
-	# Print all independent tumours
+	foreach my $i (0..$#tums) {
+		next if $i == $found;
+		print STDERR "Excluding lesion from same patient (one-per-patient list): $tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n$sample{$patient}{$tums[$i]}{line}\n";
+	}
+
+	# Print all independent and related tumours
 	foreach my $i (0..$#tums) {
 		my $fh2;
 		my $norm = $sample{$patient}{$tums[$i]}{norm};
-		if ($norm eq 'PDv38is_wes_v2') {
-			#print INDEP_UNMATCHED "$tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n";
-			$fh2 = *INDEP_UNMATCHED;
+		if (!defined($metadata_file) || (defined($metadata_file) && $sample{$patient}{$tums[$i]}{type} eq "P")) {
+			if ($norm eq 'PDv38is_wes_v2') {
+				#print INDEP_UNMATCHED "$tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n";
+				$fh2 = *INDEP_UNMATCHED;
+			} else {
+				#print INDEP_MATCHED "$tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n";
+				$fh2 = *INDEP_MATCHED;
+			}
+			print INDEP "$tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n";
 		} else {
-			#print INDEP_MATCHED "$tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n";
-			$fh2 = *INDEP_MATCHED;
+			if ($norm eq 'PDv38is_wes_v2') {
+				$fh2 = *RELATED_UNMATCHED;
+			} else {
+				$fh2 = *RELATED_MATCHED;
+			}
+			print RELATED "$tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n";
 		}
 		print $fh2 "$tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n";
-		print INDEP "$tums[$i]\t$sample{$patient}{$tums[$i]}{norm}\n";
 	}
 }
 
@@ -178,9 +257,16 @@ close INDEP_UNMATCHED;
 close ONE_MATCHED;
 close INDEP_MATCHED;
 
+if (defined($metadata_file)) {
+	close RELATED;
+	close RELATED_MATCHED;
+	close RELATED_UNMATCHED;
+}
+
 # Create files with just the tumours
 
-foreach my $file ('one_tumour_per_patient', 'independent_tumours', 'analysed') {
+foreach my $file ('one_tumour_per_patient', 'independent_tumours', 'analysed', 'related_tumours') {
+	last if $file eq "related_tumours" && !defined($metadata_file);
 	foreach my $type ('matched', 'unmatched', 'all') {
 		`cut -f 1 $prefix-${file}_${type}.tsv | sort > $prefix-${file}_${type}_tum.txt`;
 	}
@@ -208,7 +294,7 @@ END1
 
 print READ "\nFILES:\n\n";
 
-foreach my $file ('one_tumour_per_patient', 'independent_tumours', 'analysed') {
+foreach my $file ('one_tumour_per_patient', 'independent_tumours', 'analysed', 'related') {
 	foreach my $type ('matched', 'unmatched', 'all') {
 		print READ "$prefix-${file}_${type}.tsv\n";
 	}
@@ -226,14 +312,18 @@ File naming convention
 one_tumour_per_patient
 ----------------------
 
-One tumour per patient is selected fromi the QC-pass/non-rejected
-list, based on alphabetical order
+One tumour per patient is selected from the QC-pass/non-rejected
+list, based on alphabetical order. If a metadata file with tumour
+type was provided, tumour type is further prioritised in order:
+P, R, M, U, "-"
 
 independent_tumours
 -------------------
 
 All tumours from each patient from the QC-pass/non-rejected list,
-annotated as independent tumours
+annotated as originating different tumours, not samples from the same patient.
+If a metadata file was provided, this list will only include primary tumours
+and all other tumours will be classified as 'related tumours'.
 
 analysed_tumours
 ----------------
@@ -241,6 +331,12 @@ analysed_tumours
 All tumours from each patient from the QC-pass/non-rejected list,
 including samples from the same tumour, that were run through
 Caveman/Pindel
+
+related_tumours
+---------------
+If a metadata file with tumour type was provided for sample list generation,
+non-primary tumours will be separated from primary tumours in the independent
+tumours list, and placed in the related tumours matched/unmatched lists
 
 matched
 -------
