@@ -27,7 +27,9 @@ include:
     # We need to set this to 1 to enable BuildKit as the Dockerfile uses BuildKit features to speed up the build
     DOCKER_BUILDKIT: 1
     PRE_FETCH_BASE_IMAGE: gitlab-registry.internal.sanger.ac.uk/dermatlas/analysis-methods/maf:latest
-    USE_DEPLOY_TOKEN_FOR_DOCKER_LOGIN: 1
+    # We rely on a base image that comes from a different repository, the CI
+    # doesn't have access without using the deploy token.
+    USE_DEPLOY_TOKEN_FOR_DOCKER_LOGIN: 0
     DOCKER_BUILD_CONTEXT: .
     DOCKERFILE_PATH: docker/Dockerfile
 
