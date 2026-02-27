@@ -6,7 +6,7 @@ stages:
 include:
 # DOCS: https://gitlab.internal.sanger.ac.uk/DERMATLAS/common/cicd-template/-/blob/develop/README.md
   - project: 'team113sanger/common/cicd-template'
-    ref: 0.3.4
+    ref: 0.4.1
     file: '.gitlab-ci-components.yml'
 
 #############
@@ -25,7 +25,8 @@ include:
     USE_DOCKER_TARGET_STAGE: 0
     # We need to set this to 1 to enable BuildKit as the Dockerfile uses BuildKit features to speed up the build
     DOCKER_BUILDKIT: 1
-    PRE_FETCH_BASE_IMAGE: gitlab-registry.internal.sanger.ac.uk/dermatlas/analysis-methods/maf:latest
+    # PRE_FETCH_BASE_IMAGE: gitlab-registry.internal.sanger.ac.uk/dermatlas/analysis-methods/maf:latest
+    PRE_FETCH_BASE_IMAGE: gitlab-registry.internal.sanger.ac.uk/dermatlas/analysis-methods/maf:0.6.5
     DOCKER_BUILD_CONTEXT: .
     DOCKERFILE_PATH: docker/Dockerfile
 
