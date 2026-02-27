@@ -6,8 +6,7 @@ stages:
 include:
 # DOCS: https://gitlab.internal.sanger.ac.uk/DERMATLAS/common/cicd-template/-/blob/develop/README.md
   - project: 'team113sanger/common/cicd-template'
-    # ref: 0.4.1
-    ref: 70c1277f08ef037f40e7ded5a8bbf80a616d9f99
+    ref: 0.4.2
     file: '.gitlab-ci-components.yml'
 
 #############
@@ -29,7 +28,7 @@ include:
     PRE_FETCH_BASE_IMAGE: gitlab-registry.internal.sanger.ac.uk/dermatlas/analysis-methods/maf:latest
     # We rely on a base image that comes from a different repository, the CI
     # doesn't have access without using the deploy token.
-    USE_DEPLOY_TOKEN_FOR_DOCKER_LOGIN: 0
+    USE_DEPLOY_TOKEN_FOR_DOCKER_LOGIN: 1
     DOCKER_BUILD_CONTEXT: .
     DOCKERFILE_PATH: docker/Dockerfile
 
